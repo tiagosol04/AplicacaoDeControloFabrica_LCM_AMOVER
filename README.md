@@ -1,5 +1,3 @@
-[README-GestaoFabricaAJP.md](https://github.com/user-attachments/files/26768357/README-GestaoFabricaAJP.md)
-<div align="center">
 
 ```
      ╔════════════════════════════════════════════════════════════════════╗
