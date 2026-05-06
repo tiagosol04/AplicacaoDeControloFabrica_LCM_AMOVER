@@ -329,7 +329,7 @@ private fun TabChecklists(
     access: RoleAccessUi?,
     viewModel: OrdemDetalheRealViewModel
 ) {
-    val podeMarckar = access?.canMarcarChecklist == true && !uiState.concluida
+    val podeMarcar = access?.canMarcarChecklist == true && !uiState.concluida
 
     Column(
         modifier = Modifier
@@ -342,7 +342,7 @@ private fun TabChecklists(
             titulo = "Montagem",
             itens = uiState.checklistsMontagem,
             tipo = "montagem",
-            podeMarcar = podeMarckar,
+            podeMarcar = podeMarcar,
             isLoading = uiState.actionLoading,
             onToggle = { checklistId, concluido -> viewModel.toggleChecklist("montagem", checklistId, concluido) }
         )
@@ -350,7 +350,7 @@ private fun TabChecklists(
             titulo = "Embalagem",
             itens = uiState.checklistsEmbalagem,
             tipo = "embalagem",
-            podeMarcar = podeMarckar,
+            podeMarcar = podeMarcar,
             isLoading = uiState.actionLoading,
             onToggle = { checklistId, concluido -> viewModel.toggleChecklist("embalagem", checklistId, concluido) }
         )
@@ -358,7 +358,7 @@ private fun TabChecklists(
             titulo = "Controlo Final",
             itens = uiState.checklistsControlo,
             tipo = "controlo",
-            podeMarcar = podeMarckar,
+            podeMarcar = podeMarcar,
             isLoading = uiState.actionLoading,
             onToggle = { checklistId, concluido -> viewModel.toggleChecklist("controlo", checklistId, concluido) }
         )
@@ -486,8 +486,6 @@ private fun TabAcoes(
             "finalizar" -> "Finalizar ordem"
             "bloquear" -> "Bloquear ordem"
             "desbloquear" -> "Desbloquear ordem"
-            "embalada" -> "Marcar como embalada"
-            "enviada" -> "Marcar como enviada"
             else -> "Confirmar ação"
         }
         AlertDialog(
@@ -497,6 +495,11 @@ private fun TabAcoes(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Confirmar esta ação para a ordem ${uiState.numeroOrdem}?")
                     if (tipo == "bloquear") {
+                        Text(
+                            "Aviso: o motivo nao e persistido no backend nesta versao — fica apenas em log local. Ver BACKEND_REQUIREMENTS.md.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = FactoryWarning
+                        )
                         OutlinedTextField(
                             value = motivoBloqueio,
                             onValueChange = { motivoBloqueio = it },
@@ -516,8 +519,6 @@ private fun TabAcoes(
                             "finalizar" -> viewModel.finalizarOrdem()
                             "bloquear" -> viewModel.bloquearOrdem(motivoBloqueio)
                             "desbloquear" -> viewModel.desbloquearOrdem()
-                            "embalada" -> viewModel.atualizarEstado(4)
-                            "enviada" -> viewModel.atualizarEstado(5)
                         }
                         confirmDialog = null
                         motivoBloqueio = ""
@@ -567,7 +568,7 @@ private fun TabAcoes(
 
         // ── Finalizar ordem ──
         if (!uiState.concluida && !uiState.bloqueada && access?.canFinalizarOrdem == true) {
-            val podeFinalizarAgora = uiState.montagemOk && uiState.embalagemOk && uiState.controloOk && uiState.unidadeRegistada
+            val podeFinalizarAgora = uiState.unidadeRegistada && !uiState.vinPendente && uiState.montagemOk && uiState.embalagemOk && uiState.controloOk
             Button(
                 onClick = { confirmDialog = "finalizar" },
                 modifier = Modifier.fillMaxWidth(),
@@ -580,7 +581,7 @@ private fun TabAcoes(
             }
             if (!podeFinalizarAgora) {
                 Text(
-                    "Para finalizar: unidade registada, VIN registado e todos os checklists concluídos.",
+                    "Para finalizar: unidade registada, sem VIN pendente, montagem OK, embalagem OK e controlo OK. Validacao de pecas SN obrigatorias nao disponivel nesta versao.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -622,15 +623,15 @@ private fun TabAcoes(
                 )
                 if (access?.canFinalizarOrdem == true) {
                     OutlinedButton(
-                        onClick = { confirmDialog = "embalada" },
+                        onClick = {},
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isWorking && uiState.concluida
-                    ) { Text("Marcar como embalada") }
+                        enabled = false
+                    ) { Text("Marcar como embalada (por integrar)") }
                     OutlinedButton(
-                        onClick = { confirmDialog = "enviada" },
+                        onClick = {},
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isWorking && uiState.concluida
-                    ) { Text("Marcar como enviada") }
+                        enabled = false
+                    ) { Text("Marcar como enviada (por integrar)") }
                 }
             }
         }

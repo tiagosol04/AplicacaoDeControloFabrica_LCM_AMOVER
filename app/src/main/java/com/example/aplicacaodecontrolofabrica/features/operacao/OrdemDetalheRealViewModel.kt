@@ -395,7 +395,9 @@ class OrdemDetalheRealViewModel(
                         numeroIdentificacao = vin.trim(),
                         cor = corFinal,
                         quilometragem = 0.0,
-                        estado = 3 // Em produção
+                        // PENDÊNCIA: estado inicial da mota ao criar. Valor 1 (Ativa) usado como estado
+                        // seguro neutro até o backend confirmar a convenção correcta. Ver BACKEND_REQUIREMENTS.md.
+                        estado = 1
                     )
                 )
             }.onSuccess {

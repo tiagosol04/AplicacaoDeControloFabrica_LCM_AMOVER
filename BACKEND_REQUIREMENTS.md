@@ -122,10 +122,10 @@ A app usa `BuildConfig.API_BASE_URL` injectado pelo Gradle. Em release, o tráfe
   "numeroIdentificacao": "string",
   "cor": "string",
   "quilometragem": 0.0,
-  "estado": 3
+  "estado": 1
 }
 ```
-> `cor` é obrigatório. `numeroIdentificacao` (VIN) pode ser string vazia no registo inicial — o VIN é depois atualizado via `PUT /api/motas/{id}/identificacao`.
+> `cor` é obrigatório. `estado=1` (Ativa) é o valor actualmente enviado como estado neutro seguro — ver decisão 4 na secção 8. `numeroIdentificacao` (VIN) pode ser string vazia no registo inicial — o VIN é depois atualizado via `PUT /api/motas/{id}/identificacao`.
 
 **`PUT /api/motas/{id}/identificacao` — Request:**
 ```json
@@ -465,9 +465,19 @@ Exemplos de aliases atualmente aceites para retrocompatibilidade:
 
 ## 7. Roles / perfis de utilizador
 
-A app recebe `roles: List<String>` do endpoint `/api/auth/me` e mapeia para um de 6 perfis internos. O matching é feito por substring (case-insensitive), o que pode gerar falsos positivos se o backend usar nomes de role não documentados.
+A app recebe `roles: List<String>` do endpoint `/api/auth/me` e mapeia para um de 6 perfis internos. O matching é feito por **conjuntos explícitos após normalização** (maiúsculas, remoção de acentos) — não por substring. Roles desconhecidas recebem o perfil `GENERICO` sem permissões críticas.
 
-**Recomendação:** Definir um conjunto fixo de roles e partilhá-lo com a equipa mobile para substituir o matching por substring por matching exato.
+**Conjuntos reconhecidos (após normalização):**
+
+| Conjunto | Valores aceites |
+|----------|-----------------|
+| Admin | ADMIN, ADMINISTRADOR, ADMINISTRACAO, GESTAO, GESTOR, MANAGER, FABRICANTE, DIRETOR, GERENTE |
+| Supervisor | SUPERVISOR, SUPERVISOR_PRODUCAO, PRODUCAO, CHEFE_LINHA, RESPONSAVEL_FABRICA, CHEFE_PRODUCAO, GESTOR_PRODUCAO |
+| Linha | OPERADOR, OPERADOR_LINHA, LINHA, MONTAGEM, EMBALAGEM, RESPONSAVEL_LINHA, MECANICO, TECNICO_LINHA |
+| Qualidade | QUALIDADE, CONTROLO, CONTROLE, QC, QUALIDADE_PRODUCAO, TECNICO_QUALIDADE, INSPECTOR |
+| Pós-venda | POSVENDA, POS_VENDA, GARANTIA, OFICINA, SERVICO, SERVICOS, AFTERSALES, ASSISTENCIA, REPARACAO |
+
+**Recomendação:** Definir um conjunto fixo de roles e partilhá-lo com a equipa mobile para confirmar os aliases aceites.
 
 | Role API (exemplo) | Perfil interno | Permissões-chave |
 |--------------------|---------------|------------------|
@@ -501,6 +511,6 @@ A app recebe `roles: List<String>` do endpoint `/api/auth/me` e mapeia para um d
 
 3. **`criarOrdensFromEncomenda` retorna lista:** O endpoint `POST /api/ordens/from-encomenda/{encomendaId}` retorna `List<IdResponse>`. A app usa o `size` da lista para informar o utilizador do número de ordens criadas.
 
-4. **Mota `estado=3` no registo:** Ao criar uma mota numa ordem em produção, a app envia `estado=3` como convenção de "em produção/montagem". Se o backend tiver uma convenção diferente, ajustar em `OrdemDetalheRealViewModel.registarMota()`.
+4. **Mota `estado` no registo — PENDÊNCIA CRÍTICA:** A app enviava `estado=3` ao criar uma mota. Por falta de confirmação do backend sobre a convenção correcta, o valor foi alterado para `estado=1` (Ativa — estado neutro seguro). Se o backend exigir um valor diferente para motas criadas em ordens em produção, ajustar `estado` em `OrdemDetalheRealViewModel.registarMota()` e remover este aviso.
 
 5. **VIN em uppercase:** A app normaliza o VIN para maiúsculas antes de enviar via `PUT /api/motas/{id}/identificacao`. O backend deve armazenar o valor recebido sem transformação para não criar inconsistências.
