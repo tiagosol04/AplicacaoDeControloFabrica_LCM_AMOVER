@@ -1,5 +1,6 @@
 package com.example.aplicacaodecontrolofabrica.features.alertas
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aplicacaodecontrolofabrica.data.model.Alerta
@@ -19,7 +20,11 @@ data class AlertasUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val alertas: List<Alerta> = emptyList(),
-    val alertaSelecionado: Alerta? = null
+    val alertaSelecionado: Alerta? = null,
+    // Indica que os alertas são calculados localmente a partir das ordens —
+    // não existem no backend como entidades persistentes.
+    // Quando existir endpoint GET /api/alertas, remover este flag e consumir a API.
+    val alertasCalculados: Boolean = true
 )
 
 class AlertasViewModel(
@@ -82,7 +87,8 @@ class AlertasViewModel(
 
         val modelosMap = runCatching {
             fabricaRepository.getModelos().associateBy { it.idModelo ?: 0 }
-        }.getOrDefault(emptyMap())
+        }.onFailure { Log.e("AlertasVM", "Falha ao carregar modelos para alertas", it) }
+            .getOrDefault(emptyMap())
 
         val alertas = mutableListOf<Alerta>()
 
@@ -93,10 +99,14 @@ class AlertasViewModel(
             val modeloNome = modelosMap[ordem.idModelo ?: -1]?.nomeModelo?.takeIf { !it.isNullOrBlank() }
 
             val resumoDeferred = viewModelScope.async {
-                runCatching { fabricaRepository.getOrdemResumo(ordemId) }.getOrNull()
+                runCatching { fabricaRepository.getOrdemResumo(ordemId) }
+                    .onFailure { Log.e("AlertasVM", "Falha resumo ordem $ordemId", it) }
+                    .getOrNull()
             }
             val motasDeferred = viewModelScope.async {
-                runCatching { fabricaRepository.getMotasDaOrdem(ordemId) }.getOrDefault(emptyList())
+                runCatching { fabricaRepository.getMotasDaOrdem(ordemId) }
+                    .onFailure { Log.e("AlertasVM", "Falha motas ordem $ordemId", it) }
+                    .getOrDefault(emptyList())
             }
 
             val resumo = resumoDeferred.await()

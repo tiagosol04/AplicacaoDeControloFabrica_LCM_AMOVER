@@ -1,5 +1,6 @@
 package com.example.aplicacaodecontrolofabrica.features.cockpit
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aplicacaodecontrolofabrica.data.dto.UtilizadorDto
@@ -119,11 +120,13 @@ class DashboardRealViewModel(
 
         val utilizadores: List<UtilizadorDto> = runCatching {
             fabricaRepository.getUtilizadores()
-        }.getOrDefault(emptyList())
+        }.onFailure { Log.e("DashboardVM", "Falha ao carregar utilizadores", it) }
+            .getOrDefault(emptyList())
 
         val modelosMap = runCatching {
             fabricaRepository.getModelos().associateBy { it.idModelo ?: 0 }
-        }.getOrDefault(emptyMap())
+        }.onFailure { Log.e("DashboardVM", "Falha ao carregar modelos", it) }
+            .getOrDefault(emptyMap())
 
         val cards = mutableListOf<DashboardOrderUi>()
         val acoes = mutableListOf<DashboardActionUi>()
@@ -156,10 +159,14 @@ class DashboardRealViewModel(
                 ?: "Modelo por identificar"
 
             val resumoDeferred = viewModelScope.async {
-                runCatching { fabricaRepository.getOrdemResumo(ordemId) }.getOrNull()
+                runCatching { fabricaRepository.getOrdemResumo(ordemId) }
+                    .onFailure { Log.e("DashboardVM", "Falha resumo ordem $ordemId", it) }
+                    .getOrNull()
             }
             val motasDeferred = viewModelScope.async {
-                runCatching { fabricaRepository.getMotasDaOrdem(ordemId) }.getOrDefault(emptyList())
+                runCatching { fabricaRepository.getMotasDaOrdem(ordemId) }
+                    .onFailure { Log.e("DashboardVM", "Falha motas ordem $ordemId", it) }
+                    .getOrDefault(emptyList())
             }
 
             val resumo = resumoDeferred.await()
@@ -388,7 +395,9 @@ class DashboardRealViewModel(
         )
 
         // Serviços em aberto
-        val servicosData = runCatching { fabricaRepository.getServicosEmAberto() }.getOrNull()
+        val servicosData = runCatching { fabricaRepository.getServicosEmAberto() }
+            .onFailure { Log.e("DashboardVM", "Falha ao carregar serviços em aberto", it) }
+            .getOrNull()
         val servicosEmAberto = servicosData?.total ?: 0
         val servicosGarantia = servicosData?.servicos?.count { (it.tipo ?: 0) == 3 } ?: 0
         val servicosAvaria = servicosData?.servicos?.count { (it.tipo ?: 0) == 2 } ?: 0

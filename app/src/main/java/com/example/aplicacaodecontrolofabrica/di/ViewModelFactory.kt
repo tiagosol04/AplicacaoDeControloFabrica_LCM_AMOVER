@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.aplicacaodecontrolofabrica.data.repository.ServiceLocator
 import com.example.aplicacaodecontrolofabrica.features.alertas.AlertasViewModel
 import com.example.aplicacaodecontrolofabrica.features.cockpit.DashboardRealViewModel
+import com.example.aplicacaodecontrolofabrica.features.encomendas.EncomendaDetalheViewModel
 import com.example.aplicacaodecontrolofabrica.features.encomendas.EncomendasViewModel
 import com.example.aplicacaodecontrolofabrica.features.equipa.EquipaViewModel
 import com.example.aplicacaodecontrolofabrica.features.historico.HistoricoViewModel
@@ -57,6 +58,9 @@ class ViewModelFactory : ViewModelProvider.Factory {
 
             modelClass.isAssignableFrom(EncomendasViewModel::class.java) ->
                 EncomendasViewModel(repo = fabricaRepository) as T
+
+            modelClass.isAssignableFrom(EncomendaDetalheViewModel::class.java) ->
+                EncomendaDetalheViewModel(repo = fabricaRepository) as T
 
             else -> throw IllegalArgumentException("ViewModel desconhecido: ${modelClass.name}")
         }

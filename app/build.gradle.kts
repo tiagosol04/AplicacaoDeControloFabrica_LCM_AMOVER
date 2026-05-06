@@ -16,13 +16,23 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:5137/\"")
     }
 
     buildTypes {
+        debug {
+            // Emulador Android usa 10.0.2.2 para aceder ao localhost do PC de desenvolvimento.
+            // Para testar num dispositivo físico na mesma rede, substituir pelo IP do PC (ex: "http://192.168.1.x:5137/")
+            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:5137/\"")
+            // cleartext HTTP aceitável apenas em desenvolvimento
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+        }
         release {
             isMinifyEnabled = false
+            // OBRIGATÓRIO: definir URL real do servidor de produção antes de publicar.
+            // Exemplo: buildConfigField("String", "API_BASE_URL", "\"https://api.myfulgora.ajp.pt/\"")
+            buildConfigField("String", "API_BASE_URL", "\"https://CONFIGURAR_URL_PRODUCAO_AQUI/\"")
+            // Em produção não deve existir tráfego HTTP em claro
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

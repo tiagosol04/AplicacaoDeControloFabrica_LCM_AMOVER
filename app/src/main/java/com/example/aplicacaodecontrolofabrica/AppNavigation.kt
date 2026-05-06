@@ -3,7 +3,6 @@ package com.example.aplicacaodecontrolofabrica.app
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -49,6 +48,7 @@ import com.example.aplicacaodecontrolofabrica.di.ViewModelFactory
 import com.example.aplicacaodecontrolofabrica.features.alertas.AlertaDetalheScreen
 import com.example.aplicacaodecontrolofabrica.features.alertas.AlertasScreen
 import com.example.aplicacaodecontrolofabrica.features.cockpit.DashboardScreen
+import com.example.aplicacaodecontrolofabrica.features.encomendas.EncomendaDetalheScreen
 import com.example.aplicacaodecontrolofabrica.features.encomendas.EncomendasScreen
 import com.example.aplicacaodecontrolofabrica.features.equipa.EquipaScreen
 import com.example.aplicacaodecontrolofabrica.features.historico.HistoricoScreen
@@ -78,6 +78,9 @@ sealed class Screen(val route: String, val title: String) {
     }
     data object ServicoDetalhe : Screen("servico/{servicoId}", "Serviço") {
         fun create(id: Int) = "servico/$id"
+    }
+    data object EncomendaDetalhe : Screen("encomenda/{encomendaId}", "Encomenda") {
+        fun create(id: Int) = "encomenda/$id"
     }
 }
 
@@ -164,7 +167,10 @@ fun AppNavigation() {
 
         composable(Screen.Encomendas.route) {
             AppShell(Screen.Encomendas.title, navController, authVm, access) { p ->
-                EncomendasScreen(contentPadding = p)
+                EncomendasScreen(
+                    contentPadding = p,
+                    onOpenEncomenda = { id -> navController.navigate(Screen.EncomendaDetalhe.create(id)) }
+                )
             }
         }
 
@@ -216,7 +222,7 @@ fun AppNavigation() {
             val ordemId = entry.arguments?.getInt("ordemId") ?: 0
             DetailShell(title = "Ordem", onBack = { navController.popBackStack() }) { p ->
                 Box(Modifier.padding(p)) {
-                    FichaOperacionalScreen(ordemId = ordemId, onBack = { navController.popBackStack() })
+                    FichaOperacionalScreen(ordemId = ordemId, onBack = { navController.popBackStack() }, access = access)
                 }
             }
         }
@@ -229,6 +235,23 @@ fun AppNavigation() {
             DetailShell(title = "Serviço", onBack = { navController.popBackStack() }) { p ->
                 Box(Modifier.padding(p)) {
                     ServicoDetalheScreen(servicoId = servicoId, onBack = { navController.popBackStack() })
+                }
+            }
+        }
+
+        composable(
+            route = Screen.EncomendaDetalhe.route,
+            arguments = listOf(navArgument("encomendaId") { type = NavType.IntType })
+        ) { entry ->
+            val encomendaId = entry.arguments?.getInt("encomendaId") ?: 0
+            DetailShell(title = "Encomenda", onBack = { navController.popBackStack() }) { p ->
+                Box(Modifier.padding(p)) {
+                    EncomendaDetalheScreen(
+                        encomendaId = encomendaId,
+                        access = access,
+                        onBack = { navController.popBackStack() },
+                        onOpenOrdem = { id -> navController.navigate(Screen.FichaOperacional.create(id)) }
+                    )
                 }
             }
         }

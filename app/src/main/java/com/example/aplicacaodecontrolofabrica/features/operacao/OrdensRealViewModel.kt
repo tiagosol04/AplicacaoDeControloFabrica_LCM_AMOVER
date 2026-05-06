@@ -1,5 +1,6 @@
 package com.example.aplicacaodecontrolofabrica.features.operacao
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aplicacaodecontrolofabrica.data.model.AcaoPrincipalUi
@@ -111,10 +112,14 @@ class OrdensRealViewModel(
             val ordemId = ordem.idOrdemProducao ?: return@mapNotNull null
 
             val resumoDeferred = viewModelScope.async {
-                runCatching { fabricaRepository.getOrdemResumo(ordemId) }.getOrNull()
+                runCatching { fabricaRepository.getOrdemResumo(ordemId) }
+                    .onFailure { Log.e("OrdensVM", "Falha ao obter resumo da ordem $ordemId", it) }
+                    .getOrNull()
             }
             val motasDeferred = viewModelScope.async {
-                runCatching { fabricaRepository.getMotasDaOrdem(ordemId) }.getOrDefault(emptyList())
+                runCatching { fabricaRepository.getMotasDaOrdem(ordemId) }
+                    .onFailure { Log.e("OrdensVM", "Falha ao obter motas da ordem $ordemId", it) }
+                    .getOrDefault(emptyList())
             }
 
             val resumo = resumoDeferred.await()
