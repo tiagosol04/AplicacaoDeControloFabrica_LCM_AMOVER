@@ -40,6 +40,36 @@ interface ApiService {
     @POST("api/ordens/{id}/finalizar")
     suspend fun finalizarOrdem(@Path("id") id: Int): FinalizarOrdemResponse
 
+    @GET("api/ordens/{id}/ficha")
+    suspend fun getOrdemFicha(@Path("id") id: Int): OrdemFichaDto
+
+    @POST("api/ordens/{id}/bloquear")
+    suspend fun bloquearOrdem(@Path("id") id: Int, @Body body: BloquearOrdemRequest): BloquearOrdemResponse
+
+    @POST("api/ordens/{id}/desbloquear")
+    suspend fun desbloquearOrdem(@Path("id") id: Int, @Body body: DesbloquearOrdemRequest): DesbloquearOrdemResponse
+
+    @GET("api/ordens/{id}/historico")
+    suspend fun getOrdemHistorico(@Path("id") id: Int): HistoricoOrdemResponse
+
+    @POST("api/ordens/{id}/marcar-embalada")
+    suspend fun marcarEmbalada(@Path("id") id: Int): MarcarEmbalagemResponse
+
+    @POST("api/ordens/{id}/marcar-enviada")
+    suspend fun marcarEnviada(@Path("id") id: Int): MarcarEnviadaResponse
+
+    @GET("api/ordens/prontos-expedicao")
+    suspend fun getProntosExpedicao(): ProntosExpedicaoResponse
+
+    @GET("api/ordens/{id}/utilizadores")
+    suspend fun getOrdemUtilizadores(@Path("id") id: Int): OrdemUtilizadoresResponse
+
+    @GET("api/dashboard/resumo")
+    suspend fun getDashboardResumo(): DashboardResumoDto
+
+    @GET("api/alertas")
+    suspend fun getAlertas(): AlertasApiResponse
+
     // ── Motas / VIN / peças SN ──
     @GET("api/motas")
     suspend fun getMotas(@Query("estado") estado: Int? = null, @Query("ordemId") ordemId: Int? = null, @Query("semVin") semVin: Boolean? = null): List<MotaDto>
@@ -64,6 +94,12 @@ interface ApiService {
 
     @GET("api/motas/{id}/pecas-sn/resumo")
     suspend fun getMotaPecasSnResumo(@Path("id") id: Int): PecasSnResumoResponse
+
+    @GET("api/motas/{id}/pecas-fixas")
+    suspend fun getMotaPecasFixas(@Path("id") id: Int): PecaFixaResponse
+
+    @PUT("api/motas/{id}")
+    suspend fun updateMota(@Path("id") id: Int, @Body body: CriarMotaRequest): MotaDto
 
     @POST("api/motas/{id}/pecas-sn")
     suspend fun addPecaSn(@Path("id") id: Int, @Body body: AddPecaSnRequest): IdResponse

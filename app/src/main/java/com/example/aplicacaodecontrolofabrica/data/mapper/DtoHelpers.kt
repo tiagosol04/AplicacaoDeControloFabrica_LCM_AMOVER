@@ -54,11 +54,10 @@ object DtoHelpers {
     }
 
     fun mapEstadoMota(value: Int?): String = when (value) {
-        0 -> "Inativa"
+        0 -> "Em Produção"
         1 -> "Ativa"
-        2 -> "Em serviço"
-        3 -> "Em produção"
-        4 -> "Descontinuada"
+        2 -> "Em Manutenção"
+        3 -> "Descontinuada"
         else -> "Desconhecido"
     }
 

@@ -78,6 +78,37 @@ data class MotaPecaSnDto(
     val serialNumber: String? = null
 )
 
+data class PecaFixaDto(
+    @SerializedName(value = "idPeca", alternate = ["IDPeca", "IdPeca", "id", "Id"])
+    val idPeca: Int? = null,
+
+    @SerializedName(value = "nome", alternate = ["Nome"])
+    val nome: String? = null,
+
+    @SerializedName(value = "partNumber", alternate = ["PartNumber", "partnumber"])
+    val partNumber: String? = null,
+
+    @SerializedName(value = "quantidade", alternate = ["Quantidade"])
+    val quantidade: Int? = null,
+
+    @SerializedName(value = "descricao", alternate = ["Descricao"])
+    val descricao: String? = null
+)
+
+data class PecaFixaResponse(
+    @SerializedName(value = "motaId", alternate = ["MotaId", "IDMota", "idMota"])
+    val motaId: Int? = null,
+
+    @SerializedName(value = "idModelo", alternate = ["IdModelo", "IDModelo"])
+    val idModelo: Int? = null,
+
+    @SerializedName(value = "total", alternate = ["Total"])
+    val total: Int? = null,
+
+    @SerializedName(value = "pecas", alternate = ["Pecas", "items"])
+    val pecas: List<PecaFixaDto> = emptyList()
+)
+
 data class PecaDto(
     @SerializedName(
         value = "IDPeca",

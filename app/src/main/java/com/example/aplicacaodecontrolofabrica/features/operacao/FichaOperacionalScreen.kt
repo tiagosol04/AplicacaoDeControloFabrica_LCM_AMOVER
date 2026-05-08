@@ -77,7 +77,7 @@ import com.example.aplicacaodecontrolofabrica.ui.theme.FactoryPrimary
 import com.example.aplicacaodecontrolofabrica.ui.theme.FactorySecondary
 import com.example.aplicacaodecontrolofabrica.ui.theme.FactoryWarning
 
-private val TABS = listOf("Geral", "Unidades", "Checklists", "Peças SN", "Ações")
+private val TABS = listOf("Geral", "Unidades", "Checklists", "Peças SN", "Ações", "Histórico")
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -132,6 +132,7 @@ fun FichaOperacionalScreen(
                         2 -> TabChecklists(uiState, access, viewModel)
                         3 -> TabPecasSn(uiState, access, viewModel)
                         4 -> TabAcoes(uiState, access, viewModel)
+                        5 -> TabHistorico(uiState)
                     }
                 }
             }
@@ -429,8 +430,34 @@ private fun TabPecasSn(
         uiState.motasFicha.forEach { mota ->
             SectionCard(title = "Unidade #${mota.motaId}${mota.vin?.let { " — $it" } ?: ""}") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // ── Peças fixas do modelo ──
+                    if (mota.pecasFixas.isNotEmpty()) {
+                        Text(
+                            "Peças fixas do modelo",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = FactoryInfo
+                        )
+                        mota.pecasFixas.forEach { pf ->
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(pf.nome, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                                    pf.partNumber?.let { Text("PN: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                }
+                                Text("×${pf.quantidade}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+                    // ── Peças SN registadas na unidade ──
+                    Text(
+                        "Peças SN registadas na unidade",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = FactoryPrimary
+                    )
                     if (mota.pecasSn.isEmpty()) {
-                        Text("Sem peças SN registadas nesta unidade.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Sem peças SN registadas.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         mota.pecasSn.forEach { peca ->
                             Row(
@@ -478,6 +505,7 @@ private fun TabAcoes(
 ) {
     var confirmDialog by remember { mutableStateOf<String?>(null) }
     var motivoBloqueio by remember { mutableStateOf("") }
+    var resolucaoDesbloqueio by remember { mutableStateOf("") }
 
     // Diálogo de confirmação genérico
     confirmDialog?.let { tipo ->
@@ -486,27 +514,41 @@ private fun TabAcoes(
             "finalizar" -> "Finalizar ordem"
             "bloquear" -> "Bloquear ordem"
             "desbloquear" -> "Desbloquear ordem"
+            "embalada" -> "Marcar como embalada"
+            "enviada" -> "Marcar como enviada"
             else -> "Confirmar ação"
         }
         AlertDialog(
-            onDismissRequest = { confirmDialog = null; motivoBloqueio = "" },
+            onDismissRequest = { confirmDialog = null; motivoBloqueio = ""; resolucaoDesbloqueio = "" },
             title = { Text(titulo) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Confirmar esta ação para a ordem ${uiState.numeroOrdem}?")
                     if (tipo == "bloquear") {
-                        Text(
-                            "Aviso: o motivo nao e persistido no backend nesta versao — fica apenas em log local. Ver BACKEND_REQUIREMENTS.md.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = FactoryWarning
-                        )
                         OutlinedTextField(
                             value = motivoBloqueio,
                             onValueChange = { motivoBloqueio = it },
-                            label = { Text("Motivo do bloqueio") },
+                            label = { Text("Motivo do bloqueio *") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = false,
                             minLines = 2
+                        )
+                    }
+                    if (tipo == "desbloquear") {
+                        OutlinedTextField(
+                            value = resolucaoDesbloqueio,
+                            onValueChange = { resolucaoDesbloqueio = it },
+                            label = { Text("Resolução / nota (opcional)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = false,
+                            minLines = 2
+                        )
+                    }
+                    if (tipo == "enviada") {
+                        Text(
+                            "A expedição ainda não tem tabela própria na BD. A mota poderá transitar para Ativa. Nenhum dado de transportadora é registado.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = FactoryWarning
                         )
                     }
                 }
@@ -518,10 +560,13 @@ private fun TabAcoes(
                             "iniciar" -> viewModel.iniciarOrdem()
                             "finalizar" -> viewModel.finalizarOrdem()
                             "bloquear" -> viewModel.bloquearOrdem(motivoBloqueio)
-                            "desbloquear" -> viewModel.desbloquearOrdem()
+                            "desbloquear" -> viewModel.desbloquearOrdem(resolucaoDesbloqueio)
+                            "embalada" -> viewModel.marcarEmbalada()
+                            "enviada" -> viewModel.marcarEnviada()
                         }
                         confirmDialog = null
                         motivoBloqueio = ""
+                        resolucaoDesbloqueio = ""
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (tipo == "bloquear") FactoryAlert else FactoryPrimary
@@ -530,7 +575,7 @@ private fun TabAcoes(
                 ) { Text("Confirmar") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDialog = null; motivoBloqueio = "" }) { Text("Cancelar") }
+                TextButton(onClick = { confirmDialog = null; motivoBloqueio = ""; resolucaoDesbloqueio = "" }) { Text("Cancelar") }
             }
         )
     }
@@ -613,25 +658,38 @@ private fun TabAcoes(
             }
         }
 
-        // ── Marcar como embalada / enviada (estados futuros — por integrar no backend) ──
-        SectionCard(title = "Expedição (por integrar)") {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "As ações de marcar como 'Embalada' e 'Enviada' requerem endpoint dedicado no backend. Ver BACKEND_REQUIREMENTS.md.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (access?.canFinalizarOrdem == true) {
+        // ── Expedição ──
+        if (!uiState.concluida && access?.canFinalizarOrdem == true) {
+            SectionCard(title = "Expedição") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "A expedição ainda não tem tabela própria na BD. Estas ações são proxies operacionais.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (!uiState.avisoExpedicao.isNullOrBlank()) {
+                        Card(
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(containerColor = FactoryWarning.copy(alpha = 0.1f))
+                        ) {
+                            Text(
+                                uiState.avisoExpedicao!!,
+                                modifier = Modifier.padding(10.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = FactoryWarning
+                            )
+                        }
+                    }
                     OutlinedButton(
-                        onClick = {},
+                        onClick = { confirmDialog = "embalada" },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = false
-                    ) { Text("Marcar como embalada (por integrar)") }
+                        enabled = !isWorking
+                    ) { Text("Marcar como embalada") }
                     OutlinedButton(
-                        onClick = {},
+                        onClick = { confirmDialog = "enviada" },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = false
-                    ) { Text("Marcar como enviada (por integrar)") }
+                        enabled = !isWorking
+                    ) { Text("Marcar como enviada") }
                 }
             }
         }
@@ -651,6 +709,62 @@ private fun TabAcoes(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// TAB 5 — Histórico
+// ─────────────────────────────────────────────────────────────
+@Composable
+private fun TabHistorico(uiState: FichaOperacionalUiState) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (!uiState.avisoHistorico.isNullOrBlank()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = FactoryInfo.copy(alpha = 0.1f))
+            ) {
+                Text(
+                    uiState.avisoHistorico!!,
+                    modifier = Modifier.padding(10.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = FactoryInfo
+                )
+            }
+        }
+        if (uiState.historicoItems.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    "Sem histórico disponível para esta ordem.\n(Endpoint calculado pelo backend.)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(uiState.historicoItems, key = { it.id }) { item ->
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(item.tipo, style = MaterialTheme.typography.labelSmall, color = FactoryInfo)
+                                Text(item.dataOcorrencia?.take(10) ?: "—", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text(item.descricao, style = MaterialTheme.typography.bodySmall)
+                            Text("Por: ${item.utilizadorNome}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
             }
         }
     }

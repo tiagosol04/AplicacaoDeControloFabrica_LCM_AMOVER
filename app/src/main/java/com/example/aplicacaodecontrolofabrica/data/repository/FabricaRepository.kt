@@ -14,6 +14,16 @@ interface FabricaRepository {
     suspend fun finalizarOrdem(id: Int): FinalizarOrdemResponse
     suspend fun getMotasDaOrdem(ordemId: Int): List<MotaDto>
     suspend fun criarMotaNaOrdem(ordemId: Int, body: CriarMotaRequest): Int
+    suspend fun getOrdemFicha(id: Int): OrdemFichaDto
+    suspend fun bloquearOrdem(id: Int, motivo: String): BloquearOrdemResponse
+    suspend fun desbloquearOrdem(id: Int, resolucao: String?): DesbloquearOrdemResponse
+    suspend fun getOrdemHistorico(id: Int): HistoricoOrdemResponse
+    suspend fun marcarEmbalada(id: Int): MarcarEmbalagemResponse
+    suspend fun marcarEnviada(id: Int): MarcarEnviadaResponse
+    suspend fun getProntosExpedicao(): ProntosExpedicaoResponse
+    suspend fun getOrdemUtilizadores(id: Int): OrdemUtilizadoresResponse
+    suspend fun getDashboardResumo(): DashboardResumoDto
+    suspend fun getAlertas(): AlertasApiResponse
 
     // ── Motas / VIN / peças SN ──
     suspend fun getMotas(): List<MotaDto>
@@ -26,6 +36,8 @@ interface FabricaRepository {
     suspend fun getMotaPecasSnResumo(motaId: Int): PecasSnResumoResponse
     suspend fun addMotaPecaSn(motaId: Int, body: AddPecaSnRequest): Int
     suspend fun deleteMotaPecaSn(idMotaPecaSn: Int)
+    suspend fun getMotaPecasFixas(motaId: Int): PecaFixaResponse
+    suspend fun updateMota(motaId: Int, body: CriarMotaRequest): MotaDto
 
     // ── Peças ──
     suspend fun getPecas(): List<PecaDto>

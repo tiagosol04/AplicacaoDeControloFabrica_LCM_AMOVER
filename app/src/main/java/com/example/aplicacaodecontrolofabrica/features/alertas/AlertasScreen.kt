@@ -98,8 +98,28 @@ fun AlertasScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // ── Banner: alertas calculados localmente ──
-            if (uiState.alertasCalculados) {
+            // ── Banner: alertas calculados ──
+            if (uiState.alertasFallbackLocal) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = FactoryWarning.copy(alpha = 0.1f))
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Filled.Info, contentDescription = null, tint = FactoryWarning, modifier = Modifier.size(16.dp))
+                            Text(
+                                text = "Fallback local — sem ligação ao /api/alertas. Alertas calculados a partir das ordens em memória.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = FactoryWarning
+                            )
+                        }
+                    }
+                }
+            } else if (uiState.alertasCalculados) {
                 item {
                     Card(
                         shape = RoundedCornerShape(10.dp),
@@ -112,7 +132,7 @@ fun AlertasScreen(
                         ) {
                             Icon(Icons.Filled.Info, contentDescription = null, tint = FactoryInfo, modifier = Modifier.size(16.dp))
                             Text(
-                                text = "Alertas calculados a partir das ordens em tempo real. Sem endpoint de alertas no backend.",
+                                text = "Alertas calculados pelo backend a partir dos dados atuais. Ainda não são persistidos.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = FactoryInfo
                             )

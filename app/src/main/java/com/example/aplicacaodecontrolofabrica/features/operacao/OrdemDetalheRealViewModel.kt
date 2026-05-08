@@ -19,13 +19,28 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** Representa uma mota dentro da ficha operacional, com VIN e peças SN carregadas. */
+data class HistoricoItemUi(
+    val id: Int,
+    val tipo: String,
+    val descricao: String,
+    val utilizadorNome: String,
+    val dataOcorrencia: String?
+)
+
+data class PecaFixaUi(
+    val idPeca: Int,
+    val nome: String,
+    val partNumber: String?,
+    val quantidade: Int
+)
+
 data class MotaFichaUi(
     val motaId: Int,
     val vin: String?,
     val cor: String?,
     val estado: String,
-    val pecasSn: List<MotaPecaSnDto> = emptyList()
+    val pecasSn: List<MotaPecaSnDto> = emptyList(),
+    val pecasFixas: List<PecaFixaUi> = emptyList()
 )
 
 data class FichaOperacionalUiState(
@@ -60,22 +75,22 @@ data class FichaOperacionalUiState(
     val proximaAcao: String = "",
     val resumoRisco: String = "",
 
-    // ── Dados completos das motas (unidades + VIN + peças SN) ──
     val motasFicha: List<MotaFichaUi> = emptyList(),
 
-    // ── Checklists por grupo ──
     val checklistsMontagem: List<ChecklistExecucao> = emptyList(),
     val checklistsEmbalagem: List<ChecklistExecucao> = emptyList(),
     val checklistsControlo: List<ChecklistExecucao> = emptyList(),
 
-    // ── Peças disponíveis para registo de número de série ──
     val pecasDisponiveis: List<PecaDto> = emptyList(),
 
-    // ── Estado de ação em curso e feedback ──
+    val historicoItems: List<HistoricoItemUi> = emptyList(),
+    val utilizadoresAtribuidos: Int = 0,
+
     val actionLoading: Boolean = false,
     val actionSuccess: String? = null,
+    val avisoExpedicao: String? = null,
+    val avisoHistorico: String? = null,
 
-    // ── Tab atual (0=Geral, 1=Unidades, 2=Checklists, 3=Peças, 4=Ações) ──
     val tabAtual: Int = 0
 )
 
@@ -98,9 +113,7 @@ class OrdemDetalheRealViewModel(
 
     fun load(ordemId: Int) {
         viewModelScope.launch {
-            _uiState.update {
-                it.copy(isLoading = true, errorMessage = null, ordemId = ordemId)
-            }
+            _uiState.update { it.copy(isLoading = true, errorMessage = null, ordemId = ordemId) }
             runCatching {
                 buildState(ordemId)
             }.onSuccess { state ->
@@ -118,78 +131,145 @@ class OrdemDetalheRealViewModel(
     }
 
     private suspend fun buildState(ordemId: Int): FichaOperacionalUiState {
-        val ordem = fabricaRepository.getOrdem(ordemId)
-
-        val resumoDeferred = viewModelScope.async {
-            runCatching { fabricaRepository.getOrdemResumo(ordemId) }
-                .onFailure { Log.e(TAG, "Falha ao obter resumo da ordem $ordemId", it) }
-                .getOrNull()
-        }
-        val motasDeferred = viewModelScope.async {
-            runCatching { fabricaRepository.getMotasDaOrdem(ordemId) }
-                .onFailure { Log.e(TAG, "Falha ao obter motas da ordem $ordemId", it) }
-                .getOrDefault(emptyList())
-        }
-        val modeloDeferred = viewModelScope.async {
-            val idModelo = ordem.idModelo
-            if (idModelo != null) {
-                runCatching { fabricaRepository.getModelo(idModelo) }
-                    .onFailure { Log.e(TAG, "Falha ao obter modelo $idModelo", it) }
-                    .getOrNull()
-            } else null
-        }
-        val clienteDeferred = viewModelScope.async {
-            val idCliente = ordem.idCliente
-            if (idCliente != null) {
-                runCatching { fabricaRepository.getCliente(idCliente) }
-                    .onFailure { Log.e(TAG, "Falha ao obter cliente $idCliente", it) }
-                    .getOrNull()
-            } else null
+        // Lançar em paralelo o que é sempre necessário
+        val fichaDeferred = viewModelScope.async {
+            runCatching { fabricaRepository.getOrdemFicha(ordemId) }.getOrNull()
         }
         val checklistsDeferred = viewModelScope.async {
-            runCatching { fabricaRepository.getChecklistsDaOrdem(ordemId) }
-                .onFailure { Log.e(TAG, "Falha ao obter checklists da ordem $ordemId", it) }
-                .getOrNull()
+            runCatching { fabricaRepository.getChecklistsDaOrdem(ordemId) }.getOrNull()
         }
         val pecasDeferred = viewModelScope.async {
-            runCatching { fabricaRepository.getPecas() }
-                .onFailure { Log.e(TAG, "Falha ao obter peças disponíveis", it) }
-                .getOrDefault(emptyList())
+            runCatching { fabricaRepository.getPecas() }.getOrDefault(emptyList())
+        }
+        val historicoDeferred = viewModelScope.async {
+            runCatching { fabricaRepository.getOrdemHistorico(ordemId) }.getOrNull()
+        }
+        val utilizadoresDeferred = viewModelScope.async {
+            runCatching { fabricaRepository.getOrdemUtilizadores(ordemId) }.getOrNull()
         }
 
-        val resumo = resumoDeferred.await()
-        val motasDtos = motasDeferred.await()
-        val modelo = modeloDeferred.await()
-        val cliente = clienteDeferred.await()
-        val checklistsStatus = checklistsDeferred.await()
-        val pecasDisponiveis = pecasDeferred.await()
+        val ficha = fichaDeferred.await()
 
-        // Carregar peças SN por mota em paralelo
+        // Resolver dados base: ficha se disponível, senão chamadas individuais
+        val numeroOrdem: String
+        val modeloNome: String
+        val clienteNome: String
+        val paisDestino: String
+        val estadoBase: Int
+        val dataCriacaoIso: String?
+        val dataConclusaoIso: String?
+        val montagemOk: Boolean
+        val embalagemOk: Boolean
+        val controloOk: Boolean
+        val totalServicos: Int
+        var motasDtos = emptyList<com.example.aplicacaodecontrolofabrica.data.dto.MotaDto>()
+
+        if (ficha != null) {
+            numeroOrdem = ficha.numeroOrdem?.ifBlank { "Sem nº" } ?: "Sem nº"
+            modeloNome = ficha.modeloNome?.ifBlank { "Modelo por identificar" } ?: "Modelo por identificar"
+            clienteNome = ficha.clienteNome?.ifBlank { "Cliente por identificar" } ?: "Cliente por identificar"
+            paisDestino = ficha.paisDestino ?: "—"
+            estadoBase = ficha.estado ?: 0
+            dataCriacaoIso = ficha.dataCriacao
+            dataConclusaoIso = ficha.dataConclusao
+            montagemOk = ficha.montagemOk ?: false
+            embalagemOk = ficha.embalagemOk ?: false
+            controloOk = ficha.controloOk ?: false
+            totalServicos = ficha.totalServicos ?: 0
+            motasDtos = ficha.motas ?: emptyList()
+        } else {
+            // Fallback: chamadas individuais em paralelo
+            val ordemDeferred = viewModelScope.async { fabricaRepository.getOrdem(ordemId) }
+            val resumoDeferred = viewModelScope.async {
+                runCatching { fabricaRepository.getOrdemResumo(ordemId) }.getOrNull()
+            }
+            val motasDeferred = viewModelScope.async {
+                runCatching { fabricaRepository.getMotasDaOrdem(ordemId) }.getOrDefault(emptyList())
+            }
+
+            val ordem = ordemDeferred.await()
+            val resumo = resumoDeferred.await()
+            motasDtos = motasDeferred.await()
+
+            val modeloDeferred = viewModelScope.async {
+                val idModelo = ordem.idModelo
+                if (idModelo != null) runCatching { fabricaRepository.getModelo(idModelo) }.getOrNull() else null
+            }
+            val clienteDeferred = viewModelScope.async {
+                val idCliente = ordem.idCliente
+                if (idCliente != null) runCatching { fabricaRepository.getCliente(idCliente) }.getOrNull() else null
+            }
+
+            numeroOrdem = ordem.numeroOrdem?.ifBlank { "Sem nº" } ?: "Sem nº"
+            modeloNome = modeloDeferred.await()?.nomeModelo?.ifBlank { "Modelo por identificar" } ?: "Modelo por identificar"
+            clienteNome = clienteDeferred.await()?.nome?.ifBlank { "Cliente por identificar" } ?: "Cliente por identificar"
+            paisDestino = ordem.paisDestino ?: "—"
+            estadoBase = ordem.estado ?: 0
+            dataCriacaoIso = ordem.dataCriacao
+            dataConclusaoIso = ordem.dataConclusao
+            montagemOk = resumo?.checklists?.montagemOk ?: false
+            embalagemOk = resumo?.checklists?.embalagemOk ?: false
+            controloOk = resumo?.checklists?.controloOk ?: false
+            totalServicos = resumo?.servicos ?: 0
+        }
+
+        // Se a ficha não incluiu motas, buscar individualmente
+        if (motasDtos.isEmpty() && ficha?.motas == null) {
+            motasDtos = runCatching { fabricaRepository.getMotasDaOrdem(ordemId) }.getOrDefault(emptyList())
+        }
+
+        // Carregar peças SN e peças fixas por mota
         val motasFicha = motasDtos.mapNotNull { mota ->
             val motaId = mota.idMota ?: return@mapNotNull null
             val pecasSn = runCatching { fabricaRepository.getMotaPecasSn(motaId) }
-                .onFailure { Log.e(TAG, "Falha ao obter peças SN da mota $motaId", it) }
+                .onFailure { Log.e(TAG, "Falha peças SN mota $motaId", it) }
                 .getOrDefault(emptyList())
+            val pecasFixasResponse = runCatching { fabricaRepository.getMotaPecasFixas(motaId) }
+                .onFailure { Log.d(TAG, "Peças fixas não disponíveis para mota $motaId") }
+                .getOrNull()
+            val pecasFixas = pecasFixasResponse?.pecas?.mapNotNull { pf ->
+                val id = pf.idPeca ?: return@mapNotNull null
+                PecaFixaUi(
+                    idPeca = id,
+                    nome = pf.nome ?: "Peça #$id",
+                    partNumber = pf.partNumber,
+                    quantidade = pf.quantidade ?: 1
+                )
+            } ?: emptyList()
             MotaFichaUi(
                 motaId = motaId,
                 vin = DtoHelpers.textOrNull(mota.numeroIdentificacao),
                 cor = DtoHelpers.textOrNull(mota.cor),
                 estado = DtoHelpers.mapEstadoMota(mota.estado),
-                pecasSn = pecasSn
+                pecasSn = pecasSn,
+                pecasFixas = pecasFixas
             )
         }
 
-        // Checklists por grupo
+        val checklistsStatus = checklistsDeferred.await()
+        val pecasDisponiveis = pecasDeferred.await()
+        val historicoResponse = historicoDeferred.await()
+        val utilizadoresData = utilizadoresDeferred.await()
+
         val checklistsPorGrupo = checklistsStatus?.toChecklistExecucoesPorGrupo() ?: emptyMap()
 
-        val estadoBase = ordem.estado ?: 0
+        val historicoItems = (historicoResponse?.historico ?: emptyList()).mapNotNull { item ->
+            val id = item.id ?: return@mapNotNull null
+            HistoricoItemUi(
+                id = id,
+                tipo = item.tipo ?: "EVENTO",
+                descricao = item.descricao ?: "—",
+                utilizadorNome = item.utilizadorNome ?: "Utilizador",
+                dataOcorrencia = item.dataOcorrencia
+            )
+        }
+        val avisoHistorico = historicoResponse?.aviso
+
+        val utilizadoresAtribuidos = utilizadoresData?.total ?: 0
+
         val bloqueada = estadoBase == 3
         val concluida = estadoBase == 2
         val emProducao = estadoBase == 1
-
-        val montagemOk = resumo?.checklists?.montagemOk ?: false
-        val embalagemOk = resumo?.checklists?.embalagemOk ?: false
-        val controloOk = resumo?.checklists?.controloOk ?: false
 
         val vinList = motasFicha.mapNotNull { it.vin }.filter { it.isNotBlank() }
         val unidadeRegistada = motasFicha.isNotEmpty()
@@ -245,14 +325,14 @@ class OrdemDetalheRealViewModel(
             isUpdating = false,
             errorMessage = null,
             ordemId = ordemId,
-            numeroOrdem = ordem.numeroOrdem?.ifBlank { "Sem nº" } ?: "Sem nº",
-            modeloNome = modelo?.nomeModelo?.ifBlank { "Modelo por identificar" } ?: "Modelo por identificar",
-            clienteNome = cliente?.nome?.ifBlank { "Cliente por identificar" } ?: "Cliente por identificar",
-            paisDestino = ordem.paisDestino ?: "—",
+            numeroOrdem = numeroOrdem,
+            modeloNome = modeloNome,
+            clienteNome = clienteNome,
+            paisDestino = paisDestino,
             estadoLabel = estadoLabel,
             estadoBase = estadoBase,
-            dataCriacaoIso = ordem.dataCriacao,
-            dataConclusaoIso = ordem.dataConclusao,
+            dataCriacaoIso = dataCriacaoIso,
+            dataConclusaoIso = dataConclusaoIso,
             bloqueada = bloqueada,
             concluida = concluida,
             unidadeRegistada = unidadeRegistada,
@@ -261,7 +341,7 @@ class OrdemDetalheRealViewModel(
             montagemOk = montagemOk,
             embalagemOk = embalagemOk,
             controloOk = controloOk,
-            totalServicos = resumo?.servicos ?: 0,
+            totalServicos = totalServicos,
             totalMotas = motasFicha.size,
             prontidaoTexto = prontidaoTexto,
             observacaoEstado = observacaoEstado,
@@ -272,6 +352,9 @@ class OrdemDetalheRealViewModel(
             checklistsEmbalagem = checklistsPorGrupo[TipoChecklistUi.EMBALAGEM] ?: emptyList(),
             checklistsControlo = checklistsPorGrupo[TipoChecklistUi.CONTROLO] ?: emptyList(),
             pecasDisponiveis = pecasDisponiveis,
+            historicoItems = historicoItems,
+            avisoHistorico = avisoHistorico,
+            utilizadoresAtribuidos = utilizadoresAtribuidos,
             tabAtual = _uiState.value.tabAtual
         )
     }
@@ -321,16 +404,12 @@ class OrdemDetalheRealViewModel(
 
     fun bloquearOrdem(motivo: String) {
         val ordemId = _uiState.value.ordemId
-        if (ordemId <= 0) return
-        // Nota: o backend não tem endpoint dedicado POST /api/ordens/{id}/bloquear com motivo.
-        // Usamos updateEstadoOrdem(3). O motivo fica apenas no log local até o backend suportar.
-        // Ver BACKEND_REQUIREMENTS.md para o endpoint necessário.
-        Log.i(TAG, "Bloquear ordem $ordemId — motivo: $motivo")
+        if (ordemId <= 0 || motivo.isBlank()) return
         viewModelScope.launch {
             _uiState.update { it.copy(actionLoading = true, errorMessage = null, actionSuccess = null) }
-            runCatching { fabricaRepository.updateOrdemEstado(ordemId, 3) }
-                .onSuccess {
-                    _uiState.update { it.copy(actionSuccess = "Ordem bloqueada.") }
+            runCatching { fabricaRepository.bloquearOrdem(ordemId, motivo.trim()) }
+                .onSuccess { response ->
+                    _uiState.update { it.copy(actionSuccess = response.message ?: "Ordem bloqueada.") }
                     load(ordemId)
                 }
                 .onFailure { ex ->
@@ -342,17 +421,14 @@ class OrdemDetalheRealViewModel(
         }
     }
 
-    fun desbloquearOrdem() {
+    fun desbloquearOrdem(resolucao: String = "") {
         val ordemId = _uiState.value.ordemId
         if (ordemId <= 0) return
-        // Nota: o backend não tem endpoint dedicado POST /api/ordens/{id}/desbloquear.
-        // Usamos updateEstadoOrdem(1) para colocar em produção.
-        // Ver BACKEND_REQUIREMENTS.md para o endpoint necessário.
         viewModelScope.launch {
             _uiState.update { it.copy(actionLoading = true, errorMessage = null, actionSuccess = null) }
-            runCatching { fabricaRepository.updateOrdemEstado(ordemId, 1) }
-                .onSuccess {
-                    _uiState.update { it.copy(actionSuccess = "Ordem desbloqueada — colocada em produção.") }
+            runCatching { fabricaRepository.desbloquearOrdem(ordemId, resolucao.trim().ifBlank { null }) }
+                .onSuccess { response ->
+                    _uiState.update { it.copy(actionSuccess = response.message ?: "Ordem desbloqueada.") }
                     load(ordemId)
                 }
                 .onFailure { ex ->
@@ -364,17 +440,50 @@ class OrdemDetalheRealViewModel(
         }
     }
 
-    fun atualizarEstado(estado: Int) {
+    fun marcarEmbalada() {
         val ordemId = _uiState.value.ordemId
         if (ordemId <= 0) return
         viewModelScope.launch {
-            _uiState.update { it.copy(isUpdating = true, errorMessage = null) }
-            runCatching { fabricaRepository.updateOrdemEstado(ordemId, estado) }
-                .onSuccess { load(ordemId) }
-                .onFailure { ex ->
-                    Log.e(TAG, "Falha ao atualizar estado da ordem $ordemId para $estado", ex)
+            _uiState.update { it.copy(actionLoading = true, errorMessage = null, actionSuccess = null, avisoExpedicao = null) }
+            runCatching { fabricaRepository.marcarEmbalada(ordemId) }
+                .onSuccess { response ->
                     _uiState.update {
-                        it.copy(isUpdating = false, errorMessage = ex.message ?: "Não foi possível atualizar o estado.")
+                        it.copy(
+                            actionSuccess = response.message ?: "Marcada como embalada.",
+                            avisoExpedicao = response.aviso
+                        )
+                    }
+                    load(ordemId)
+                }
+                .onFailure { ex ->
+                    Log.e(TAG, "Falha ao marcar ordem $ordemId como embalada", ex)
+                    _uiState.update {
+                        it.copy(actionLoading = false, errorMessage = ex.message ?: "Não foi possível marcar como embalada.")
+                    }
+                }
+        }
+    }
+
+    fun marcarEnviada() {
+        val ordemId = _uiState.value.ordemId
+        if (ordemId <= 0) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(actionLoading = true, errorMessage = null, actionSuccess = null, avisoExpedicao = null) }
+            runCatching { fabricaRepository.marcarEnviada(ordemId) }
+                .onSuccess { response ->
+                    _uiState.update {
+                        it.copy(
+                            actionSuccess = response.message ?: "Marcada como enviada.",
+                            avisoExpedicao = response.aviso
+                                ?: "Expedição ainda sem tabela própria na BD. A mota poderá transitar para Ativa. Proxy ativo."
+                        )
+                    }
+                    load(ordemId)
+                }
+                .onFailure { ex ->
+                    Log.e(TAG, "Falha ao marcar ordem $ordemId como enviada", ex)
+                    _uiState.update {
+                        it.copy(actionLoading = false, errorMessage = ex.message ?: "Não foi possível marcar como enviada.")
                     }
                 }
         }
@@ -395,9 +504,7 @@ class OrdemDetalheRealViewModel(
                         numeroIdentificacao = vin.trim(),
                         cor = corFinal,
                         quilometragem = 0.0,
-                        // PENDÊNCIA: estado inicial da mota ao criar. Valor 1 (Ativa) usado como estado
-                        // seguro neutro até o backend confirmar a convenção correcta. Ver BACKEND_REQUIREMENTS.md.
-                        estado = 1
+                        estado = 0  // 0 = Em Produção (API força Estado=0, mas a app fica coerente)
                     )
                 )
             }.onSuccess {

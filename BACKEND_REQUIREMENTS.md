@@ -251,15 +251,47 @@ A app usa `BuildConfig.API_BASE_URL` injectado pelo Gradle. Em release, o tráfe
 
 ---
 
-## 4. Workarounds ativos — endpoints em falta
+## 4. Endpoints operacionais integrados (novos)
 
-Os seguintes comportamentos da app usam workarounds por ausência de endpoints dedicados. Quando os endpoints forem criados, os workarounds devem ser removidos.
+Os seguintes endpoints foram adicionados à API e a app já os consome.
+
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| `GET` | `/api/ordens/{id}/ficha` | Ficha operacional consolidada (ordem + modelo + cliente + checklists summary + motas) |
+| `POST` | `/api/ordens/{id}/bloquear` | Bloquear ordem com motivo obrigatório (enviado; sem persistência real na BD até existir tabela de histórico) |
+| `POST` | `/api/ordens/{id}/desbloquear` | Desbloquear ordem com resolução opcional |
+| `GET` | `/api/ordens/{id}/historico` | Histórico de eventos da ordem (calculado) |
+| `POST` | `/api/ordens/{id}/marcar-embalada` | Marcar ordem como embalada (proxy — sem tabela de expedição) |
+| `POST` | `/api/ordens/{id}/marcar-enviada` | Marcar ordem como enviada (proxy — pode transitar mota para Ativa) |
+| `GET` | `/api/dashboard/resumo` | Resumo agregado do dashboard (elimina N+1) |
+| `GET` | `/api/alertas` | Alertas calculados pelo backend (campo `calculado: true`) |
+| `GET` | `/api/ordens/prontos-expedicao` | Ordens prontas para expedição |
+| `GET` | `/api/motas/{id}/pecas-fixas` | Peças fixas do modelo da mota |
+| `GET` | `/api/ordens/{id}/utilizadores` | Utilizadores/operadores atribuídos à ordem |
+| `PUT` | `/api/motas/{id}` | Atualizar dados completos de uma mota |
+
+**Notas importantes:**
+- `POST /api/ordens/{id}/motas` força `Estado=0` (Em Produção) no backend. A app envia `estado=0` de forma coerente.
+- `GET /api/dashboard/resumo` substitui a lógica N+1 anterior. Se o endpoint falhar, a app faz fallback automático para N+1.
+- `GET /api/alertas` deve incluir o campo `calculado: true` na resposta wrapper `{ calculado, alertas: [] }`. Se o endpoint falhar, a app usa cálculo local com banner de aviso.
+- `GET /api/ordens/{id}/historico` devolve **wrapper** `{ ordemId, numeroOrdem, aviso, total, historico: [] }` — não lista direta. Dados calculados (não persistidos). A app usa `response.historico` e `response.aviso`.
+- `GET /api/motas/{id}/pecas-fixas` devolve **wrapper** `{ motaId, idModelo, total, pecas: [] }` — não lista direta. A app usa `response.pecas`.
+- `GET /api/ordens/prontos-expedicao` devolve **wrapper** `{ total, ordens: [] }` — não lista direta.
+- Os endpoints de expedição (`marcar-embalada`, `marcar-enviada`) são proxies operacionais sem tabela própria na BD. A app mostra aviso ao utilizador.
 
 ---
 
-### 4.1 Bloquear ordem com motivo
+## 5. Workarounds removidos — endpoints agora integrados
 
-**Situação atual:** A app usa `PUT /api/ordens/{id}/estado` com `{ "estado": 3 }`. O campo `motivo` (introduzido pelo utilizador no diálogo de confirmação) é apenas guardado em log local — **não é enviado ao backend**.
+Os seguintes workarounds foram removidos com a integração dos novos endpoints.
+
+---
+
+### 5.1 Bloquear ordem com motivo — INTEGRADO
+
+**Situação anterior:** A app usava `PUT /api/ordens/{id}/estado` com `{ "estado": 3 }`. O motivo não era enviado ao backend.
+
+**Situação atual:** A app usa `POST /api/ordens/{id}/bloquear` com `{ "motivo": "..." }`. O motivo é enviado ao backend, mas a API atual **NÃO persiste o motivo na BD** — não existe tabela/campo de histórico de bloqueios. A API devolve aviso. O estado da ordem transita para 3 (Bloqueada), mas o motivo em si perde-se.
 
 **Endpoint necessário:**
 ```
@@ -403,20 +435,27 @@ Não existe endpoint para consultar o histórico de bloqueios de uma ordem (quem
 GET /api/ordens/{id}/historico
 ```
 
-**Response esperada:**
+**Response real (wrapper — não lista direta):**
 ```json
-[
-  {
-    "id": 1,
-    "tipo": "BLOQUEIO | ESTADO | CHECKLIST | VIN",
-    "descricao": "string",
-    "utilizadorId": 3,
-    "utilizadorNome": "string",
-    "dataOcorrencia": "ISO8601",
-    "valorAnterior": "string",
-    "valorNovo": "string"
-  }
-]
+{
+  "ordemId": 1,
+  "numeroOrdem": "ORD-001",
+  "aviso": "string (opcional — indica que dados são calculados)",
+  "total": 3,
+  "historico": [
+    {
+      "id": 1,
+      "tipo": "BLOQUEIO | ESTADO | CHECKLIST | VIN",
+      "descricao": "string",
+      "utilizadorId": 3,
+      "utilizadorNome": "string",
+      "dataOcorrencia": "ISO8601",
+      "valorAnterior": "string",
+      "valorNovo": "string",
+      "calculado": true
+    }
+  ]
+}
 ```
 
 ---
@@ -505,12 +544,18 @@ A app recebe `roles: List<String>` do endpoint `/api/auth/me` e mapeia para um d
 
 ## 8. Decisões de implementação documentadas
 
-1. **Alertas calculados no cliente:** Enquanto não existir `GET /api/alertas`, os alertas são calculados a partir das ordens. A app mostra um banner informativo para deixar claro que não são dados persistidos no backend.
+1. **Alertas via API com fallback local:** A app tenta primeiro `GET /api/alertas`. Se o endpoint devolver `calculado: true`, o banner indica "calculados pelo backend". Se o endpoint falhar, a app usa cálculo local e mostra banner de fallback (cor laranja). Se o endpoint devolver `calculado: false`, não mostra banner — os alertas são considerados persistidos.
 
-2. **Bloquear sem motivo persistido:** O motivo de bloqueio é recolhido na app mas só enviado ao backend quando o endpoint `POST /api/ordens/{id}/bloquear` for criado. Até lá, o motivo é apenas registado em `Log.i`.
+2. **Bloquear com motivo — sem persistência real:** A app usa `POST /api/ordens/{id}/bloquear` com `{ "motivo": "..." }`. O motivo é enviado ao backend, mas a API atual **NÃO persiste o motivo na BD** — sem tabela de histórico/bloqueios. A API devolve aviso. A app não comunica persistência ao utilizador. Workaround anterior (`PUT /api/ordens/{id}/estado`) foi removido.
 
 3. **`criarOrdensFromEncomenda` retorna lista:** O endpoint `POST /api/ordens/from-encomenda/{encomendaId}` retorna `List<IdResponse>`. A app usa o `size` da lista para informar o utilizador do número de ordens criadas.
 
-4. **Mota `estado` no registo — PENDÊNCIA CRÍTICA:** A app enviava `estado=3` ao criar uma mota. Por falta de confirmação do backend sobre a convenção correcta, o valor foi alterado para `estado=1` (Ativa — estado neutro seguro). Se o backend exigir um valor diferente para motas criadas em ordens em produção, ajustar `estado` em `OrdemDetalheRealViewModel.registarMota()` e remover este aviso.
+4. **Mota `estado=0` ao criar — RESOLVIDO:** A API confirma que ao criar uma mota via `POST /api/ordens/{id}/motas`, o backend força `Estado=0` (Em Produção). A app envia `estado=0` de forma coerente. Estados confirmados: 0=Em Produção, 1=Ativa, 2=Em Manutenção, 3=Descontinuada.
 
 5. **VIN em uppercase:** A app normaliza o VIN para maiúsculas antes de enviar via `PUT /api/motas/{id}/identificacao`. O backend deve armazenar o valor recebido sem transformação para não criar inconsistências.
+
+6. **Dashboard com fallback N+1:** A app tenta primeiro `GET /api/dashboard/resumo`. Se o endpoint falhar, usa a lógica N+1 anterior (getOrdens + por cada ordem getResumo + getMotas). Sem zeros silenciosos: falha total mostra erro ao utilizador.
+
+7. **Expedição como proxy:** `POST /api/ordens/{id}/marcar-embalada` e `marcar-enviada` são proxies sem tabela de expedição na BD. A app mostra aviso ao utilizador quando estes endpoints devolvem `aviso`. Nenhum dado de transportadora/data de envio é apresentado se a API não o devolver.
+
+8. **Ficha operacional consolidada:** A app tenta primeiro `GET /api/ordens/{id}/ficha`. Se falhar, faz fallback automático para getOrdem + getOrdemResumo + getModelo + getCliente em paralelo. Histórico e utilizadores atribuídos são sempre tentados mas nunca bloqueantes.

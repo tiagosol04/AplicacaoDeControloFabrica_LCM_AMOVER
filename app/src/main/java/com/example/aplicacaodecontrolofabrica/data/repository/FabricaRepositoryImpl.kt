@@ -17,6 +17,16 @@ class FabricaRepositoryImpl(
     override suspend fun finalizarOrdem(id: Int) = api.finalizarOrdem(id)
     override suspend fun getMotasDaOrdem(ordemId: Int) = api.getMotasDaOrdem(ordemId)
     override suspend fun criarMotaNaOrdem(ordemId: Int, body: CriarMotaRequest) = api.criarMota(ordemId, body).id ?: 0
+    override suspend fun getOrdemFicha(id: Int) = api.getOrdemFicha(id)
+    override suspend fun bloquearOrdem(id: Int, motivo: String) = api.bloquearOrdem(id, BloquearOrdemRequest(motivo))
+    override suspend fun desbloquearOrdem(id: Int, resolucao: String?) = api.desbloquearOrdem(id, DesbloquearOrdemRequest(resolucao))
+    override suspend fun getOrdemHistorico(id: Int) = api.getOrdemHistorico(id)
+    override suspend fun marcarEmbalada(id: Int) = api.marcarEmbalada(id)
+    override suspend fun marcarEnviada(id: Int) = api.marcarEnviada(id)
+    override suspend fun getProntosExpedicao() = api.getProntosExpedicao()
+    override suspend fun getOrdemUtilizadores(id: Int) = api.getOrdemUtilizadores(id)
+    override suspend fun getDashboardResumo() = api.getDashboardResumo()
+    override suspend fun getAlertas() = api.getAlertas()
 
     // ── Motas ──
     override suspend fun getMotas() = api.getMotas()
@@ -29,6 +39,8 @@ class FabricaRepositoryImpl(
     override suspend fun getMotaPecasSnResumo(motaId: Int) = api.getMotaPecasSnResumo(motaId)
     override suspend fun addMotaPecaSn(motaId: Int, body: AddPecaSnRequest) = api.addPecaSn(motaId, body).id ?: 0
     override suspend fun deleteMotaPecaSn(idMotaPecaSn: Int) { api.deleteMotaPecaSn(idMotaPecaSn) }
+    override suspend fun getMotaPecasFixas(motaId: Int) = api.getMotaPecasFixas(motaId)
+    override suspend fun updateMota(motaId: Int, body: CriarMotaRequest) = api.updateMota(motaId, body)
 
     // ── Peças ──
     override suspend fun getPecas() = api.getPecas()
